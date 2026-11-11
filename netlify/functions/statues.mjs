@@ -33,9 +33,11 @@ async function getCurrent(req,store){
   return {body:seed,etag:null,hasEntry:false};
 }
 export default async function handler(req){
+  let stage='initialize';
   try{
     if(!['GET','PUT'].includes(req.method))return json({error:'Method not allowed'},405);
     if(req.method==='PUT'&&!authorised(req))return json({detail:'管理用キーが設定されていないか、一致しません'},401);
+    stage='load-store';
     const store=getStore(storeName);
     const current=await getCurrent(req,store);
     if(req.method==='GET')return json({...current.body,revision:hash(current.body)});
@@ -49,12 +51,19 @@ export default async function handler(req){
     const expected=req.headers.get('x-base-revision');
     if(!expected)return json({detail:'先に公開データを再読み込みしてください'},428);
     if(expected!==hash(current.body))return json({detail:'他の編集内容と競合しました。公開データを再読み込みしてください'},409);
+    stage='write-master';
     const updated={schema_version:2,records:incoming.records};
     const opts=current.hasEntry?{onlyIfMatch:current.etag}:{onlyIfNew:true};
     const result=await store.setJSON('master',updated,opts);
     if(!result.modified)return json({detail:'同時編集により保存できませんでした。再読み込みしてください'},409);
+    stage='backup';
     await getStore('daibutsu-site-backups').setJSON(Date.now()+'-'+hash(current.body).slice(0,12),current.body).catch(console.error);
     return json({ok:true,count:updated.records.length,revision:hash(updated)});
-  }catch(e){console.error('statues endpoint failed',e);return json({detail:'サーバー処理に失敗しました'},500)}
+  }catch(e){
+    console.error('statues endpoint failed', {stage,code:e?.code,status:e?.status,message:e?.message});
+    const code=String(e?.code||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80);
+    const isQuota=code==='usage_exceeded'||/usage_exceeded|credit limit|quota exceeded/i.test(String(e?.message||''));
+    return json({detail:isQuota?'Netlifyの利用枠によって保存が拒否されました（usage_exceeded）':`サーバー処理に失敗しました [${stage}${code?': '+code:''}]`},500);
+  }
 }
 export const config={path:'/api/statues'};
