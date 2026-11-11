@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs';
+import seed from '../../site/data/statues.json' with { type: 'json' };
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const headers = { 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store' };
@@ -29,9 +30,7 @@ function valid(records){
 async function getCurrent(req,store){
   const entry=await store.getWithMetadata('master',{type:'json',consistency:'strong'});
   if(entry) return {body:entry.data,etag:entry.etag,hasEntry:true};
-  const seedRes=await fetch(new URL('/data/statues.json',req.url));
-  if(!seedRes.ok)throw new Error('Initial data unavailable: '+seedRes.status);
-  return {body:await seedRes.json(),etag:null,hasEntry:false};
+  return {body:seed,etag:null,hasEntry:false};
 }
 export default async function handler(req){
   try{
