@@ -55,7 +55,14 @@ export default async function handler(req){
     const updated={schema_version:2,records:incoming.records};
     const opts=current.hasEntry?{onlyIfMatch:current.etag}:{onlyIfNew:true};
     const result=await store.setJSON('master',updated,opts);
-    if(!result.modified)return json({detail:'同時編集により保存できませんでした。再読み込みしてください'},409);
+    if(result?.modified===false)return json({detail:'同時編集により保存できませんでした。再読み込みしてください'},409);
+    // Some runtime versions may not return a result for setJSON. Never assume success:
+    // verify the exact stored value using a strong-consistency read.
+    stage='verify-write';
+    const stored=await store.get('master',{type:'json',consistency:'strong'});
+    if(!stored||hash(stored)!==hash(updated)){
+      return json({detail:'保存後の照合に失敗しました。公開データを再読み込みして確認してください'},503);
+    }
     stage='backup';
     await getStore('daibutsu-site-backups').setJSON(Date.now()+'-'+hash(current.body).slice(0,12),current.body).catch(console.error);
     return json({ok:true,count:updated.records.length,revision:hash(updated)});
