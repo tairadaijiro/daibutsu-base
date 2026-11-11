@@ -63,7 +63,8 @@ export default async function handler(req){
     console.error('statues endpoint failed', {stage,code:e?.code,status:e?.status,message:e?.message});
     const code=String(e?.code||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80);
     const isQuota=code==='usage_exceeded'||/usage_exceeded|credit limit|quota exceeded/i.test(String(e?.message||''));
-    return json({detail:isQuota?'Netlifyの利用枠によって保存が拒否されました（usage_exceeded）':`サーバー処理に失敗しました [${stage}${code?': '+code:''}]`},500);
+    const diagnostic=String(e?.message||'').replace(/[\\r\\n]+/g,' ').slice(0,180);
+    return json({detail:isQuota?'Netlifyの利用枠によって保存が拒否されました（usage_exceeded）':`サーバー処理に失敗しました [${stage}${code?': '+code:''}]${diagnostic?' '+diagnostic:''}`},500);
   }
 }
 export const config={path:'/api/statues'};
