@@ -53,9 +53,10 @@ export default async function handler(req){
     if(expected!==hash(current.body))return json({detail:'他の編集内容と競合しました。公開データを再読み込みしてください'},409);
     stage='write-master';
     const updated={schema_version:2,records:incoming.records};
-    const opts=current.hasEntry?{onlyIfMatch:current.etag}:{onlyIfNew:true};
-    const result=await store.setJSON('master',updated,opts);
-    if(result?.modified===false)return json({detail:'同時編集により保存できませんでした。再読み込みしてください'},409);
+    // Revision is checked above. Use an unconditional write here to avoid
+    // compatibility failures in the conditional-write path of Netlify Blobs.
+    // This admin interface is intended for a single editor.
+    await store.setJSON('master',updated);
     // Some runtime versions may not return a result for setJSON. Never assume success:
     // verify the exact stored value using a strong-consistency read.
     stage='verify-write';
